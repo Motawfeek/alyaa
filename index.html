@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام إدارة المرور - Traffic Map</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #fff;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #8892b0;
+            margin-bottom: 30px;
+        }
+
+        /* Status Bar */
+        .status-bar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #51cf66;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 10px #51cf66; }
+            50% { opacity: 0.5; box-shadow: none; }
+        }
+
+        .status-text {
+            color: #8892b0;
+            font-size: 0.9em;
+        }
+
+        /* Map Container */
+        .map-container {
+            background: #2d3748;
+            border-radius: 20px;
+            padding: 40px;
+            position: relative;
+            min-height: 500px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+
+        /* Grass Areas */
+        .grass {
+            position: absolute;
+            background: #2d5a3d;
+            border-radius: 10px;
+        }
+
+        .grass-1 { top: 20px; left: 20px; width: 200px; height: 150px; }
+        .grass-2 { top: 20px; right: 20px; width: 200px; height: 150px; }
+        .grass-3 { bottom: 20px; left: 20px; width: 200px; height: 150px; }
+        .grass-4 { bottom: 20px; right: 20px; width: 200px; height: 150px; }
+
+        /* Roads */
+        .road {
+            position: absolute;
+            background: #4a5568;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .road::before {
+            content: '';
+            position: absolute;
+            background: repeating-linear-gradient(
+                90deg,
+                #ffd43b 0px,
+                #ffd43b 20px,
+                transparent 20px,
+                transparent 40px
+            );
+            height: 4px;
+        }
+
+        .road-horizontal::before {
+            width: 100%;
+            height: 4px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .road-vertical::before {
+            width: 4px;
+            height: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: repeating-linear-gradient(
+                180deg,
+                #ffd43b 0px,
+                #ffd43b 20px,
+                transparent 20px,
+                transparent 40px
+            );
+        }
+
+        /* Main horizontal road */
+        .road-main {
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 80px;
+            transform: translateY(-50%);
+        }
+
+        /* Road 1 - Top */
+        .road-1 {
+            top: 0;
+            left: 50%;
+            width: 80px;
+            height: calc(50% - 40px);
+            transform: translateX(-50%);
+        }
+
+        /* Road 2 - Center (part of main) */
+        .road-2-zone {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 120px;
+            height: 80px;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+        }
+
+        /* Road 3 - Bottom */
+        .road-3 {
+            bottom: 0;
+            left: 50%;
+            width: 80px;
+            height: calc(50% - 40px);
+            transform: translateX(-50%);
+        }
+
+        /* Road Labels */
+        .road-label {
+            position: absolute;
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9em;
+            z-index: 20;
+            white-space: nowrap;
+        }
+
+        .label-road-1 {
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .label-road-2 {
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .label-road-3 {
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        /* Cars */
+        .car {
+            position: absolute;
+            font-size: 2em;
+            z-index: 15;
+            transition: all 0.5s ease;
+        }
+
+        .car-road-1 {
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%) rotate(180deg);
+        }
+
+        .car-road-3 {
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .car.hidden {
+            opacity: 0.2;
+            filter: grayscale(1);
+        }
+
+        /* Traffic Lights */
+        .traffic-light {
+            position: absolute;
+            width: 30px;
+            height: 70px;
+            background: #1a1a2e;
+            border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-around;
+            padding: 5px;
+            z-index: 20;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.5);
+        }
+
+        .light {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #333;
+        }
+
+        .light.red.active { background: #ff6b6b; box-shadow: 0 0 15px #ff6b6b; }
+        .light.yellow.active { background: #ffd43b; box-shadow: 0 0 15px #ffd43b; }
+        .light.green.active { background: #51cf66; box-shadow: 0 0 15px #51cf66; }
+
+        .traffic-light-1 {
+            top: calc(50% - 120px);
+            left: calc(50% + 50px);
+        }
+
+        .traffic-light-3 {
+            bottom: calc(50% - 120px);
+            left: calc(50% - 80px);
+        }
+
+        /* IR Sensors */
+        .ir-sensor {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background: #667eea;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2em;
+            z-index: 25;
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.5);
+            animation: sensorPulse 2s infinite;
+        }
+
+        @keyframes sensorPulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(102, 126, 234, 0.5); }
+            50% { box-shadow: 0 0 30px rgba(102, 126, 234, 0.8); }
+        }
+
+        .ir-sensor.detecting {
+            background: #ff6b6b;
+            box-shadow: 0 0 25px rgba(255, 107, 107, 0.8);
+        }
+
+        .ir-1 {
+            top: 120px;
+            left: calc(50% + 50px);
+        }
+
+        .ir-3 {
+            bottom: 120px;
+            left: calc(50% - 90px);
+        }
+
+        /* Recommendation Arrow */
+        .recommendation {
+            position: absolute;
+            top: 50%;
+            right: 30px;
+            transform: translateY(-50%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            z-index: 30;
+        }
+
+        .recommendation h3 {
+            color: #fff;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+
+        .recommendation .road-num {
+            font-size: 3em;
+            font-weight: bold;
+            color: #ffd43b;
+            text-shadow: 0 0 20px rgba(255, 212, 59, 0.5);
+        }
+
+        .recommendation .arrow {
+            font-size: 2em;
+            color: #fff;
+            animation: bounce 1s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        /* Info Panel */
+        .info-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 30;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #fff;
+            margin-bottom: 8px;
+            font-size: 0.85em;
+        }
+
+        .info-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .info-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .info-dot.busy { background: #ff6b6b; }
+        .info-dot.free { background: #51cf66; }
+
+        /* Sensor Readings Panel */
+        .sensor-panel {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .sensor-card {
+            background: rgba(255,255,255,0.05);
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        .sensor-card h4 {
+            color: #8892b0;
+            font-size: 0.85em;
+            margin-bottom: 10px;
+        }
+
+        .sensor-card .value {
+            color: #fff;
+            font-size: 1.3em;
+            font-weight: bold;
+        }
+
+        .sensor-card .value.busy { color: #ff6b6b; }
+        .sensor-card .value.free { color: #51cf66; }
+
+        footer {
+            text-align: center;
+            color: #8892b0;
+            padding: 20px;
+            font-size: 0.85em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚦 نظام إدارة المرور الذكي</h1>
+        <p class="subtitle">Smart Traffic Management System</p>
+
+        <div class="status-bar">
+            <div class="status-dot" id="connectionDot"></div>
+            <span class="status-text" id="connectionStatus">جاري الاتصال...</span>
+        </div>
+
+        <!-- Map -->
+        <div class="map-container">
+            <!-- Grass Areas -->
+            <div class="grass grass-1"></div>
+            <div class="grass grass-2"></div>
+            <div class="grass grass-3"></div>
+            <div class="grass grass-4"></div>
+
+            <!-- Roads -->
+            <div class="road road-horizontal road-main"></div>
+            <div class="road road-vertical road-1"></div>
+            <div class="road road-vertical road-3"></div>
+
+            <!-- Road Labels -->
+            <div class="road-label label-road-1" id="label-road-1">
+                🛣️ الطريق 1
+            </div>
+            <div class="road-label label-road-2" id="label-road-2">
+                🛣️ الطريق 2
+            </div>
+            <div class="road-label label-road-3" id="label-road-3">
+                🛣️ الطريق 3
+            </div>
+
+            <!-- Cars -->
+            <div class="car car-road-1" id="car-road-1">🚗</div>
+            <div class="car car-road-3" id="car-road-3">🚗</div>
+
+            <!-- IR Sensors -->
+            <div class="ir-sensor ir-1" id="ir-sensor-1" title="IR Sensor 1">📡</div>
+            <div class="ir-sensor ir-3" id="ir-sensor-3" title="IR Sensor 2">📡</div>
+
+            <!-- Traffic Lights -->
+            <div class="traffic-light traffic-light-1" id="traffic-light-1">
+                <div class="light red" id="light-1-red"></div>
+                <div class="light yellow"></div>
+                <div class="light green" id="light-1-green"></div>
+            </div>
+
+            <div class="traffic-light traffic-light-3" id="traffic-light-3">
+                <div class="light red" id="light-3-red"></div>
+                <div class="light yellow"></div>
+                <div class="light green" id="light-3-green"></div>
+            </div>
+
+            <!-- Info Panel -->
+            <div class="info-panel">
+                <div class="info-item">
+                    <div class="info-dot" id="info-dot-1"></div>
+                    <span>طريق 1: <span id="info-road-1">--</span></span>
+                </div>
+                <div class="info-item">
+                    <div class="info-dot" id="info-dot-3"></div>
+                    <span>طريق 3: <span id="info-road-3">--</span></span>
+                </div>
+            </div>
+
+            <!-- Recommendation -->
+            <div class="recommendation">
+                <h3>استخدم الطريق</h3>
+                <div class="road-num" id="recommended-road">-</div>
+                <div class="arrow">⬇️</div>
+            </div>
+        </div>
+
+        <!-- Sensor Readings -->
+        <div class="sensor-panel">
+            <div class="sensor-card">
+                <h4>📡 IR Sensor 1</h4>
+                <div class="value" id="ir1-value">--</div>
+            </div>
+            <div class="sensor-card">
+                <h4>📡 IR Sensor 2</h4>
+                <div class="value" id="ir2-value">--</div>
+            </div>
+            <div class="sensor-card">
+                <h4>🕐 آخر تحديث</h4>
+                <div class="value" id="last-update">--</div>
+            </div>
+        </div>
+
+        <footer>
+            نظام إدارة المرور الذكي - ESP32 + Firebase
+        </footer>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+    <script>
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDummy",
+            authDomain: "traffic-3903b.firebaseapp.com",
+            databaseURL: "https://traffic-3903b-default-rtdb.firebaseio.com",
+            projectId: "traffic-3903b",
+            storageBucket: "traffic-3903b.appspot.com",
+            messagingSenderId: "000000000",
+            appId: "1:000:web:000"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // DOM Elements
+        const connectionDot = document.getElementById('connectionDot');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const recommendedRoad = document.getElementById('recommended-road');
+        const ir1Value = document.getElementById('ir1-value');
+        const ir2Value = document.getElementById('ir2-value');
+        const lastUpdate = document.getElementById('last-update');
+
+        // Cars
+        const carRoad1 = document.getElementById('car-road-1');
+        const carRoad3 = document.getElementById('car-road-3');
+
+        // IR Sensors
+        const irSensor1 = document.getElementById('ir-sensor-1');
+        const irSensor3 = document.getElementById('ir-sensor-3');
+
+        // Traffic Lights
+        const light1Red = document.getElementById('light-1-red');
+        const light1Green = document.getElementById('light-1-green');
+        const light3Red = document.getElementById('light-3-red');
+        const light3Green = document.getElementById('light-3-green');
+
+        // Info Panel
+        const infoDot1 = document.getElementById('info-dot-1');
+        const infoDot3 = document.getElementById('info-dot-3');
+        const infoRoad1 = document.getElementById('info-road-1');
+        const infoRoad3 = document.getElementById('info-road-3');
+
+        // Labels
+        const labelRoad1 = document.getElementById('label-road-1');
+        const labelRoad2 = document.getElementById('label-road-2');
+        const labelRoad3 = document.getElementById('label-road-3');
+
+        // Update UI
+        function updateUI(data) {
+            const road1Busy = data.road1?.busy || false;
+            const road3Busy = data.road3?.busy || false;
+            const recommended = data.recommended_road || 0;
+
+            // Update Cars
+            carRoad1.classList.toggle('hidden', !road1Busy);
+            carRoad3.classList.toggle('hidden', !road3Busy);
+
+            // Update IR Sensors
+            irSensor1.classList.toggle('detecting', road1Busy);
+            irSensor3.classList.toggle('detecting', road3Busy);
+
+            // Update Traffic Lights
+            light1Red.classList.toggle('active', road1Busy);
+            light1Green.classList.toggle('active', !road1Busy);
+            light3Red.classList.toggle('active', road3Busy);
+            light3Green.classList.toggle('active', !road3Busy);
+
+            // Update Info Panel
+            infoDot1.className = 'info-dot ' + (road1Busy ? 'busy' : 'free');
+            infoDot3.className = 'info-dot ' + (road3Busy ? 'busy' : 'free');
+            infoRoad1.textContent = road1Busy ? 'مشغول' : 'فارغ';
+            infoRoad3.textContent = road3Busy ? 'مشغول' : 'فارغ';
+
+            // Update Labels
+            labelRoad1.style.background = road1Busy ? '#ff6b6b' : '#51cf66';
+            labelRoad3.style.background = road3Busy ? '#ff6b6b' : '#51cf66';
+            labelRoad2.style.background = (recommended === 2) ? '#ffd43b' : 'rgba(0,0,0,0.8)';
+            labelRoad2.style.color = (recommended === 2) ? '#1a1a2e' : '#fff';
+
+            // Update Recommendation
+            recommendedRoad.textContent = recommended;
+
+            // Update Sensor Values
+            ir1Value.textContent = road1Busy ? '🔴 سيارة' : '🟢 فارغ';
+            ir1Value.className = 'value ' + (road1Busy ? 'busy' : 'free');
+            
+            ir2Value.textContent = road3Busy ? '🔴 سيارة' : '🟢 فارغ';
+            ir2Value.className = 'value ' + (road3Busy ? 'busy' : 'free');
+
+            // Update Time
+            lastUpdate.textContent = new Date().toLocaleTimeString('ar-EG');
+        }
+
+        // Listen to Firebase
+        const trafficRef = database.ref('traffic');
+        
+        trafficRef.on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                updateUI(data);
+                connectionDot.style.background = '#51cf66';
+                connectionStatus.textContent = 'متصل ✓';
+            }
+        }, (error) => {
+            console.error('Firebase Error:', error);
+            connectionDot.style.background = '#ff6b6b';
+            connectionStatus.textContent = 'خطأ في الاتصال ❌';
+        });
+
+        // Connection Status
+        database.ref('.info/connected').on('value', (snap) => {
+            if (snap.val() === true) {
+                connectionDot.style.background = '#51cf66';
+                connectionStatus.textContent = 'متصل بـ Firebase ✓';
+            } else {
+                connectionDot.style.background = '#ff6b6b';
+                connectionStatus.textContent = 'غير متصل ❌';
+            }
+        });
+    </script>
+</body>
+</html>
